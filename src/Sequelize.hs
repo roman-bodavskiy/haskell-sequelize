@@ -50,7 +50,10 @@ module Sequelize
     columnize,
     fromColumnar',
     retypeQOrd,
-    EqValue (..)
+    EqValue (..),
+    Column' (..),
+    Clause',
+    castClause',
   )
 where
 
@@ -124,6 +127,28 @@ data Clause be (table :: (Type -> Type) -> Type) where
 -- IRegExp :: Text -> Term be Text
 -- NotIRegExp :: Text -> Term be Text
 -- Col :: Text -> Term be Text
+
+data ClauseT where
+  AndT :: ClauseT -> ClauseT -> ClauseT
+  OrT :: ClauseT -> ClauseT -> ClauseT
+  IsT :: c -> ClauseT
+
+data Clause' be (table :: (Type -> Type) -> Type) (c :: ClauseT) where
+  And' :: Clause' be table c1 -> Clause' be table c2 -> Clause' be table ('AndT c1 c2)
+  Or' :: Clause' be table c1 -> Clause' be table c1 -> Clause' be table ('OrT c1 c2)
+  Is' ::
+    (ToJSON value, Ord value, Show value, ToSQLObject value) =>
+    Column' table value col ->
+    Term be value ->
+    Clause' be table ('IsT col)
+
+newtype Column' table value c = Column' {getColumn' :: Column table value}
+
+-- TODO remove redundant nested lists
+castClause' :: Clause' be table c -> Clause be table
+castClause' (And' c1 c2) = And [castClause' c1, castClause' c2]
+castClause' (Or' c1 c2) = Or [castClause' c1, castClause' c2]
+castClause' (Is' col t) = Is (getColumn' col) t
 
 data Term be a where
   In :: B.BeamSqlBackendCanSerialize be a => [a] -> Term be a
